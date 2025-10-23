@@ -158,7 +158,7 @@ class_names = [
 ]
 
 MODEL_PATH = "model.pth"
-DRIVE_URL = "https://drive.google.com/file/d/1SWOehqN5jmJW0t90b9llUxngrhhlCfNT/view?usp=sharing"
+DRIVE_URL = "https://drive.google.com/file/d/1SWOehqN5jmJW0t90b9llUxngrhhlCfNT/view?usp=drive_link"
 
 @st.cache_resource
 def load_model():
