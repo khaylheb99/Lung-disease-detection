@@ -137,6 +137,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import os
 import gdown
+import numpy as np
 
 # Set page config first
 st.set_page_config(
@@ -158,46 +159,37 @@ class_names = [
 
 MODEL_PATH = "swin_lung_model.pth"
 
-# CORRECTED GOOGLE DRIVE URL FORMATS:
-# Option 1: Direct download URL (use this one)
+
 DRIVE_URL = "https://drive.google.com/uc?id=1SWOehqN5jmJW0t90b9llUxngrhhlCfNT"
 
-# Option 2: Alternative format
-# DRIVE_URL = "https://drive.google.com/uc?export=download&id=1SWOehqN5jmJW0t90b9llUxngrhhlCfNT"
 
 @st.cache_resource
 def load_model():
     """Load the model, download if not present"""
     # Download model if it doesn't exist
     if not os.path.exists(MODEL_PATH):
-        with st.spinner("📥 Downloading model from Google Drive... (This may take a few minutes for 100MB+ file)"):
+        with st.spinner(" Downloading model from Google Drive... (This may take a few minutes for 100MB+ file)"):
             try:
-                # Method 1: Using gdown with correct URL
                 gdown.download(DRIVE_URL, MODEL_PATH, quiet=False)
-                
-                # Method 2: If above fails, try with fuzzy match
-                # gdown.download("https://drive.google.com/file/d/1SWOehqN5jmJW0t90b9llUxngrhhlCfNT/view?usp=drive_link", 
-                #               MODEL_PATH, fuzzy=True, quiet=False)
-                
-                # Check if file was downloaded properly
+
                 if os.path.exists(MODEL_PATH):
                     file_size = os.path.getsize(MODEL_PATH) / (1024 * 1024)  # Size in MB
                     st.success(f"✅ Model downloaded successfully! Size: {file_size:.1f} MB")
                     
                     # Check if file size is reasonable
-                    if file_size < 50:  # If less than 50MB, probably wrong file or incomplete download
-                        st.warning(f"⚠️ Downloaded file seems small ({file_size:.1f} MB). Expected ~105MB.")
+                    if file_size < 50:  
+                        st.warning(f"Downloaded file seems small ({file_size:.1f} MB). Expected ~105MB.")
                         st.info("This might be the wrong file or the download was incomplete.")
                         return None, None
                 else:
-                    st.error("❌ Model file not found after download attempt")
+                    st.error("Model file not found after download attempt")
                     return None, None
                     
             except Exception as e:
-                st.error(f"❌ Error downloading model: {str(e)}")
+                st.error(f"Error downloading model: {str(e)}")
                 st.info("Trying alternative download method...")
                 
-                # Alternative method using requests
+                
                 try:
                     import requests
                     direct_url = "https://drive.google.com/uc?export=download&id=1SWOehqN5jmJW0t90b9llUxngrhhlCfNT"
@@ -211,13 +203,13 @@ def load_model():
                     
                     if os.path.exists(MODEL_PATH):
                         file_size = os.path.getsize(MODEL_PATH) / (1024 * 1024)
-                        st.success(f"✅ Model downloaded via alternative method! Size: {file_size:.1f} MB")
+                        st.success(f" Model downloaded via alternative method! Size: {file_size:.1f} MB")
                     else:
-                        st.error("❌ Alternative download also failed")
+                        st.error(" Alternative download also failed")
                         return None, None
                         
                 except Exception as e2:
-                    st.error(f"❌ All download methods failed: {str(e2)}")
+                    st.error(f" All download methods failed: {str(e2)}")
                     return None, None
     
     # Load the model
@@ -331,7 +323,7 @@ if uploaded_file is not None:
                 confidence = probabilities[pred_index] * 100
                 
             except Exception as e:
-                st.error(f"❌ Prediction error: {str(e)}")
+                st.error(f" Prediction error: {str(e)}")
                 st.info("Falling back to demo mode")
                 probabilities = demo_prediction(image)
                 pred_index = np.argmax(probabilities)
@@ -339,11 +331,11 @@ if uploaded_file is not None:
                 confidence = probabilities[pred_index] * 100
         
         # Display results
-        st.markdown(f"## 🎯 Prediction: **{prediction}**")
+        st.markdown(f"## Prediction: **{prediction}**")
         st.metric("Confidence", f"{confidence:.2f}%")
         
         # Show confidence for all classes
-        st.subheader("📊 Confidence Scores")
+        st.subheader(" Confidence Scores")
         for class_name, prob in zip(class_names, probabilities):
             progress_value = min(int(prob * 100), 100)
             st.write(f"**{class_name}**: {progress_value}%")
