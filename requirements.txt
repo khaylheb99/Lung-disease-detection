@@ -1,0 +1,9 @@
+streamlit
+torch
+torchvision
+numpy
+timm
+Pillow
+matplotlib
+requests
+os
