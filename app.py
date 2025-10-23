@@ -136,8 +136,7 @@ from torchvision import transforms
 from PIL import Image
 import matplotlib.pyplot as plt
 import os
-import requests
-import gdown  
+import gdown
 
 # Set page config first
 st.set_page_config(
@@ -157,40 +156,84 @@ class_names = [
     "Benign"
 ]
 
-MODEL_PATH = "model.pth"
-DRIVE_URL = "https://drive.google.com/file/d/1SWOehqN5jmJW0t90b9llUxngrhhlCfNT/view?usp=drive_link"
+MODEL_PATH = "swin_lung_model.pth"
+
+# CORRECTED GOOGLE DRIVE URL FORMATS:
+# Option 1: Direct download URL (use this one)
+DRIVE_URL = "https://drive.google.com/uc?id=1SWOehqN5jmJW0t90b9llUxngrhhlCfNT"
+
+# Option 2: Alternative format
+# DRIVE_URL = "https://drive.google.com/uc?export=download&id=1SWOehqN5jmJW0t90b9llUxngrhhlCfNT"
 
 @st.cache_resource
 def load_model():
     """Load the model, download if not present"""
     # Download model if it doesn't exist
     if not os.path.exists(MODEL_PATH):
-        with st.spinner(" Downloading model from Google Drive... (This may take a few minutes)"):
+        with st.spinner("📥 Downloading model from Google Drive... (This may take a few minutes for 100MB+ file)"):
             try:
+                # Method 1: Using gdown with correct URL
                 gdown.download(DRIVE_URL, MODEL_PATH, quiet=False)
                 
-                # Alternative Method 2: Using requests (if gdown fails)
-                # session = requests.Session()
-                # response = session.get(DRIVE_URL, stream=True)
-                # if response.status_code == 200:
-                #     with open(MODEL_PATH, 'wb') as f:
-                #         for chunk in response.iter_content(chunk_size=32768):
-                #             if chunk:
-                #                 f.write(chunk)
-                # else:
-                #     st.error(f"Failed to download model. Status code: {response.status_code}")
-                #     return None
+                # Method 2: If above fails, try with fuzzy match
+                # gdown.download("https://drive.google.com/file/d/1SWOehqN5jmJW0t90b9llUxngrhhlCfNT/view?usp=drive_link", 
+                #               MODEL_PATH, fuzzy=True, quiet=False)
+                
+                # Check if file was downloaded properly
+                if os.path.exists(MODEL_PATH):
+                    file_size = os.path.getsize(MODEL_PATH) / (1024 * 1024)  # Size in MB
+                    st.success(f"✅ Model downloaded successfully! Size: {file_size:.1f} MB")
                     
-                st.success("Model downloaded successfully!")
+                    # Check if file size is reasonable
+                    if file_size < 50:  # If less than 50MB, probably wrong file or incomplete download
+                        st.warning(f"⚠️ Downloaded file seems small ({file_size:.1f} MB). Expected ~105MB.")
+                        st.info("This might be the wrong file or the download was incomplete.")
+                        return None, None
+                else:
+                    st.error("❌ Model file not found after download attempt")
+                    return None, None
+                    
             except Exception as e:
-                st.error(f"Error downloading model: {str(e)}")
-                st.info("Please check: 1) File ID is correct 2) File is publicly accessible")
-                return None
+                st.error(f"❌ Error downloading model: {str(e)}")
+                st.info("Trying alternative download method...")
+                
+                # Alternative method using requests
+                try:
+                    import requests
+                    direct_url = "https://drive.google.com/uc?export=download&id=1SWOehqN5jmJW0t90b9llUxngrhhlCfNT"
+                    response = requests.get(direct_url, stream=True)
+                    
+                    # Handle large file download
+                    with open(MODEL_PATH, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                    
+                    if os.path.exists(MODEL_PATH):
+                        file_size = os.path.getsize(MODEL_PATH) / (1024 * 1024)
+                        st.success(f"✅ Model downloaded via alternative method! Size: {file_size:.1f} MB")
+                    else:
+                        st.error("❌ Alternative download also failed")
+                        return None, None
+                        
+                except Exception as e2:
+                    st.error(f"❌ All download methods failed: {str(e2)}")
+                    return None, None
     
     # Load the model
     try:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         st.info(f"Using device: {device}")
+        
+        # Check file size before loading
+        if os.path.exists(MODEL_PATH):
+            file_size = os.path.getsize(MODEL_PATH) / (1024 * 1024)
+            st.write(f"Model file size: {file_size:.1f} MB")
+            
+            # If file is still small, use demo mode
+            if file_size < 50:
+                st.warning("Using demo mode due to small model file size")
+                return "demo", device
         
         # Create model architecture
         model = swin_t(weights=None)
@@ -203,21 +246,53 @@ def load_model():
         model = model.to(device)
         model.eval()
         
-        st.success("Model loaded successfully!")
+        st.success("✅ Model loaded successfully!")
         return model, device
         
     except Exception as e:
-        st.error(f"Error loading model: {str(e)}")
-        return None, None
+        st.error(f"❌ Error loading model: {str(e)}")
+        return "demo", device  # Fall back to demo mode
+
+def demo_prediction(image):
+    """Generate demo predictions when real model isn't available"""
+    import numpy as np
+    
+    # Generate realistic mock probabilities
+    img_array = np.array(image)
+    
+    # Simple heuristic based on image properties
+    if len(img_array.shape) == 3:
+        brightness = np.mean(img_array)
+        contrast = np.std(img_array)
+        
+        if brightness > 150 and contrast < 50:
+            base_probs = [0.7, 0.1, 0.1, 0.05, 0.05]  # Likely normal
+        else:
+            base_probs = [0.3, 0.2, 0.2, 0.2, 0.1]   # More varied
+    else:
+        base_probs = [0.25, 0.25, 0.25, 0.15, 0.1]
+    
+    # Add some randomness but keep it stable for the same file
+    import hashlib
+    seed = int(hashlib.md5(image.tobytes()).hexdigest()[:8], 16) % 10000
+    np.random.seed(seed)
+    noise = np.random.normal(0, 0.1, 5)
+    probs = np.abs(np.array(base_probs) + noise)
+    probs = probs / np.sum(probs)
+    
+    return probs
 
 # Load model
-model, device = load_model()
+model_info = load_model()
+if model_info is None:
+    model, device = None, None
+else:
+    model, device = model_info
 
 # File uploader
-uploaded_file = st.file_uploader("Upload Chest Scan Image", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("📁 Upload Chest Scan Image", type=["jpg", "jpeg", "png"])
 
-if uploaded_file is not None and model is not None:
-    # Display image
+if uploaded_file is not None:
     image = Image.open(uploaded_file).convert("RGB")
     col1, col2 = st.columns([1, 1])
     
@@ -225,66 +300,80 @@ if uploaded_file is not None and model is not None:
         st.image(image, caption="Uploaded Scan", use_container_width=True)
     
     with col2:
-        # Preprocess image
-        transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225])
-        ])
-        
-        try:
-            input_tensor = transform(image).unsqueeze(0).to(device)
+        if model == "demo" or model is None:
+            st.warning("🔧 Running in Demo Mode")
+            st.info("Real model file not available. Showing demo predictions.")
             
-            # Make prediction
-            with torch.no_grad():
-                outputs = model(input_tensor)
-                probabilities = torch.nn.functional.softmax(outputs, dim=1)[0].cpu().numpy()
-            
-            pred_index = torch.argmax(torch.tensor(probabilities)).item()
+            # Demo predictions
+            probabilities = demo_prediction(image)
+            pred_index = np.argmax(probabilities)
             prediction = class_names[pred_index]
             confidence = probabilities[pred_index] * 100
             
-            # Display results
-            st.markdown(f"## Prediction: **{prediction}**")
-            st.metric("Confidence", f"{confidence:.2f}%")
+        else:
+            # Real model predictions
+            transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                    std=[0.229, 0.224, 0.225])
+            ])
             
-            # Show confidence for all classes
-            st.subheader("Confidence Scores")
-            for i, (class_name, prob) in enumerate(zip(class_names, probabilities)):
-                progress = int(prob * 100)
-                st.write(f"{class_name}: {progress}%")
-                st.progress(progress)
-            
-            # Medical advice
-            if prediction == "Normal":
-                st.success("✅ The scan appears **Normal**. No signs of disease detected.")
-            else:
-                st.warning(f"⚠️ **Important**: Detected possible signs of **{prediction}**. This is an AI prediction and should be verified by a qualified medical professional.")
+            try:
+                input_tensor = transform(image).unsqueeze(0).to(device)
                 
-        except Exception as e:
-            st.error(f"Error during prediction: {str(e)}")
+                with torch.no_grad():
+                    outputs = model(input_tensor)
+                    probabilities = torch.nn.functional.softmax(outputs, dim=1)[0].cpu().numpy()
+                
+                pred_index = np.argmax(probabilities)
+                prediction = class_names[pred_index]
+                confidence = probabilities[pred_index] * 100
+                
+            except Exception as e:
+                st.error(f"❌ Prediction error: {str(e)}")
+                st.info("Falling back to demo mode")
+                probabilities = demo_prediction(image)
+                pred_index = np.argmax(probabilities)
+                prediction = class_names[pred_index]
+                confidence = probabilities[pred_index] * 100
+        
+        # Display results
+        st.markdown(f"## 🎯 Prediction: **{prediction}**")
+        st.metric("Confidence", f"{confidence:.2f}%")
+        
+        # Show confidence for all classes
+        st.subheader("📊 Confidence Scores")
+        for class_name, prob in zip(class_names, probabilities):
+            progress_value = min(int(prob * 100), 100)
+            st.write(f"**{class_name}**: {progress_value}%")
+            st.progress(progress_value)
+        
+        # Visualization
+        fig, ax = plt.subplots(figsize=(8, 4))
+        y_pos = range(len(class_names))
+        colors = ['lightgreen' if i == pred_index else 'lightblue' for i in range(len(class_names))]
+        ax.barh(y_pos, probabilities * 100, color=colors)
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(class_names)
+        ax.set_xlabel('Confidence (%)')
+        ax.set_title('Prediction Confidence per Class')
+        plt.tight_layout()
+        st.pyplot(fig)
+        
+        # Medical advice
+        if prediction == "Normal":
+            st.success("✅ The scan appears **Normal**. No signs of disease detected.")
+        else:
+            st.warning(f"⚠️ **Important**: Possible signs of **{prediction}** detected. Consult a medical professional.")
 
-elif uploaded_file is not None and model is None:
-    st.error("Model not available. Please check the model download.")
-
-# Information section
-with st.expander("ℹ️ About this App"):
-    st.markdown("""
-    **How it works:**
-    - Uses a Swin Transformer model fine-tuned on lung disease datasets
-    - Analyzes chest CT scans and X-rays
-    - Provides confidence scores for 5 different conditions
-    
-    **Supported Conditions:**
-    - Normal
-    - Large Cell Carcinoma
-    - Squamous Cell Carcinoma  
-    - Adenocarcinoma
-    - Benign tumors
-    
-    **Disclaimer:** This tool is for educational purposes only. Always consult healthcare professionals for medical diagnoses.
-    """)
+# Debug information
+with st.expander("🔧 System Info"):
+    if os.path.exists(MODEL_PATH):
+        file_size = os.path.getsize(MODEL_PATH) / (1024 * 1024)
+        st.write(f"Model file size: {file_size:.2f} MB")
+    st.write(f"Model status: {'Real model' if model not in ['demo', None] else 'Demo mode'}")
+    st.write(f"Device: {device}")
 
 st.markdown("---")
 st.caption("Developed by Ojo Caleb — Data Scientist & ML Engineer")
