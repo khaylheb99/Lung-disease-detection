@@ -6,4 +6,3 @@ timm
 Pillow
 matplotlib
 requests
-os
